@@ -561,4 +561,181 @@ export class AnalyticsService {
       timestamp: now
     };
   }
+
+  // Get per-alert analytics with recurring vs snoozed insights
+  public async getPerAlertAnalytics() {
+    const alerts = await Alert.aggregate([
+      {
+        $match: {
+          status: { $ne: AlertStatus.ARCHIVED }
+        }
+      },
+      {
+        $lookup: {
+          from: 'useralertpreferences',
+          localField: '_id',
+          foreignField: 'alertId',
+          as: 'preferences'
+        }
+      },
+      {
+        $lookup: {
+          from: 'notificationdeliveries',
+          localField: '_id',
+          foreignField: 'alertId',
+          as: 'deliveries'
+        }
+      },
+      {
+        $addFields: {
+          totalRecipients: { $size: '$preferences' },
+          readCount: {
+            $size: {
+              $filter: {
+                input: '$preferences',
+                cond: { $eq: ['$$this.isRead', true] }
+              }
+            }
+          },
+          snoozedCount: {
+            $size: {
+              $filter: {
+                input: '$preferences',
+                cond: { $eq: ['$$this.isSnoozed', true] }
+              }
+            }
+          },
+          currentlySnoozedCount: {
+            $size: {
+              $filter: {
+                input: '$preferences',
+                cond: {
+                  $and: [
+                    { $eq: ['$$this.isSnoozed', true] },
+                    { $gt: ['$$this.snoozedUntil', new Date()] }
+                  ]
+                }
+              }
+            }
+          },
+          deliveredCount: { $size: '$deliveries' },
+          totalReminders: {
+            $sum: '$preferences.reminderCount'
+          }
+        }
+      },
+      {
+        $addFields: {
+          readRate: {
+            $cond: [
+              { $gt: ['$totalRecipients', 0] },
+              { $multiply: [{ $divide: ['$readCount', '$totalRecipients'] }, 100] },
+              0
+            ]
+          },
+          snoozedRate: {
+            $cond: [
+              { $gt: ['$totalRecipients', 0] },
+              { $multiply: [{ $divide: ['$snoozedCount', '$totalRecipients'] }, 100] },
+              0
+            ]
+          },
+          currentSnoozedRate: {
+            $cond: [
+              { $gt: ['$totalRecipients', 0] },
+              { $multiply: [{ $divide: ['$currentlySnoozedCount', '$totalRecipients'] }, 100] },
+              0
+            ]
+          },
+          engagementStatus: {
+            $switch: {
+              branches: [
+                {
+                  case: { $gte: ['$snoozedRate', 70] },
+                  then: 'mostly_snoozed'
+                },
+                {
+                  case: { $gte: ['$readRate', 80] },
+                  then: 'highly_engaged'
+                },
+                {
+                  case: { $and: [{ $gte: ['$readRate', 40] }, { $lt: ['$snoozedRate', 30] }] },
+                  then: 'moderately_engaged'
+                },
+                {
+                  case: { $and: [{ $lt: ['$readRate', 40] }, { $lt: ['$snoozedRate', 30] }] },
+                  then: 'low_engagement'
+                }
+              ],
+              default: 'mixed_engagement'
+            }
+          },
+          recurringCandidates: {
+            $subtract: ['$totalRecipients', '$currentlySnoozedCount']
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          title: 1,
+          severity: 1,
+          status: 1,
+          createdAt: 1,
+          startTime: 1,
+          expiryTime: 1,
+          visibility: 1,
+          totalRecipients: 1,
+          deliveredCount: 1,
+          readCount: 1,
+          snoozedCount: 1,
+          currentlySnoozedCount: 1,
+          recurringCandidates: 1,
+          totalReminders: 1,
+          readRate: { $round: ['$readRate', 1] },
+          snoozedRate: { $round: ['$snoozedRate', 1] },
+          currentSnoozedRate: { $round: ['$currentSnoozedRate', 1] },
+          engagementStatus: 1,
+          isCurrentlyActive: {
+            $and: [
+              { $lte: ['$startTime', new Date()] },
+              { $gt: ['$expiryTime', new Date()] },
+              { $eq: ['$isActive', true] }
+            ]
+          }
+        }
+      },
+      { $sort: { createdAt: -1 } }
+    ]);
+
+    // Group by engagement status for summary
+    const summary = {
+      total: alerts.length,
+      highly_engaged: alerts.filter(a => a.engagementStatus === 'highly_engaged').length,
+      moderately_engaged: alerts.filter(a => a.engagementStatus === 'moderately_engaged').length,
+      low_engagement: alerts.filter(a => a.engagementStatus === 'low_engagement').length,
+      mostly_snoozed: alerts.filter(a => a.engagementStatus === 'mostly_snoozed').length,
+      mixed_engagement: alerts.filter(a => a.engagementStatus === 'mixed_engagement').length,
+      active_alerts: alerts.filter(a => a.isCurrentlyActive).length,
+      total_recurring_candidates: alerts.reduce((sum, a) => sum + a.recurringCandidates, 0)
+    };
+
+    return {
+      alerts,
+      summary,
+      insights: {
+        most_snoozed: alerts
+          .filter(a => a.snoozedRate > 50)
+          .sort((a, b) => b.snoozedRate - a.snoozedRate)
+          .slice(0, 5),
+        highest_engagement: alerts
+          .filter(a => a.readRate > 50)
+          .sort((a, b) => b.readRate - a.readRate)
+          .slice(0, 5),
+        most_reminders: alerts
+          .sort((a, b) => b.totalReminders - a.totalReminders)
+          .slice(0, 5)
+      }
+    };
+  }
 }

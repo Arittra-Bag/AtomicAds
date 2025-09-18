@@ -162,6 +162,53 @@ export class UserController {
     ));
   });
 
+  // Snooze alert for today (timezone-aware)
+  public snoozeAlertForToday = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user.id;
+    const { alertId } = req.params;
+    const { timezone = 'UTC' } = req.body;
+
+    // Calculate hours until local midnight
+    const now = new Date();
+    const localMidnight = new Date();
+    
+    // Set to next midnight in user's timezone
+    if (timezone === 'UTC') {
+      localMidnight.setUTCHours(24, 0, 0, 0);
+    } else {
+      // For non-UTC timezones, calculate offset
+      // This is a simplified approach - in production, use a proper timezone library like moment-timezone
+      const offsetMatch = timezone.match(/^UTC([+-]\d{1,2})$/);
+      if (offsetMatch) {
+        const offset = parseInt(offsetMatch[1]);
+        localMidnight.setUTCHours(24 - offset, 0, 0, 0);
+      } else {
+        // Default to UTC if timezone format is not recognized
+        localMidnight.setUTCHours(24, 0, 0, 0);
+      }
+    }
+    
+    const hoursUntilMidnight = Math.ceil((localMidnight.getTime() - now.getTime()) / (1000 * 60 * 60));
+
+    const success = await this.alertService.snoozeAlert(userId, alertId, hoursUntilMidnight);
+
+    if (!success) {
+      throw new NotFoundError('Alert or user preference');
+    }
+
+    // Also snooze in-app notification
+    await this.inAppChannel.snooze(alertId, userId, hoursUntilMidnight);
+
+    res.json(createSuccessResponse(
+      {
+        snoozedUntil: localMidnight,
+        timezone,
+        hoursUntilMidnight
+      },
+      `Alert snoozed until midnight (${timezone}) - approximately ${hoursUntilMidnight} hours`
+    ));
+  });
+
   // Unsnooze alert
   public unsnoozeAlert = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user.id;

@@ -59,6 +59,10 @@ router.get('/analytics/detailed',
   adminController.getDetailedAnalytics
 );
 
+router.get('/analytics/per-alert', 
+  adminController.getPerAlertAnalytics
+);
+
 // User management routes
 router.get('/users', 
   validateQuery(Joi.object({

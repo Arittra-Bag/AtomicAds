@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AlertService } from '@/services/alerts/AlertService';
+import { AnalyticsService } from '@/services/analytics/AnalyticsService';
 import { User, Team, Alert, UserAlertPreference, NotificationDelivery } from '@/models';
 import { 
   CreateAlertRequest, 
@@ -15,9 +16,11 @@ import { AuthenticatedRequest } from '@/middleware/auth';
 
 export class AdminController {
   private alertService: AlertService;
+  private analyticsService: AnalyticsService;
 
   constructor() {
     this.alertService = new AlertService();
+    this.analyticsService = new AnalyticsService();
   }
 
   // Create a new alert
@@ -428,6 +431,16 @@ export class AdminController {
         deliveries
       },
       'Alert delivery status retrieved successfully'
+    ));
+  });
+
+  // Get per-alert analytics with engagement insights
+  public getPerAlertAnalytics = asyncHandler(async (req: Request, res: Response) => {
+    const analyticsData = await this.analyticsService.getPerAlertAnalytics();
+
+    res.json(createSuccessResponse(
+      analyticsData,
+      'Per-alert analytics retrieved successfully'
     ));
   });
 

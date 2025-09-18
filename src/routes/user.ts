@@ -39,6 +39,14 @@ router.patch('/alerts/:alertId/snooze',
   userController.snoozeAlert
 );
 
+router.patch('/alerts/:alertId/snooze/today', 
+  validateParams(Joi.object({ alertId: schemas.objectId })),
+  validate(Joi.object({
+    timezone: Joi.string().optional().default('UTC')
+  })),
+  userController.snoozeAlertForToday
+);
+
 router.patch('/alerts/:alertId/unsnooze', 
   validateParams(Joi.object({ alertId: schemas.objectId })),
   userController.unsnoozeAlert
