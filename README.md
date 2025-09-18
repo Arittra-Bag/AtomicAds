@@ -97,8 +97,8 @@ Requirements audit shows **full compliance** with the Product Requirements Docum
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd alerting-notification-platform
+   git clone https://github.com/Arittra-Bag/AtomicAds
+   cd AtomicAds
    ```
 
 2. **Install dependencies**
