@@ -20,7 +20,7 @@ export class DatabaseConfig {
     }
 
     try {
-      const mongoUrl = process.env.MONGO_URL || 'mongodb+srv://arittrabag:HcYGWHsobaGCjAYv@cluster0.sxa8js9.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+      const mongoUrl = process.env.MONGO_URL || 'your-mongo-url';
       
       await mongoose.connect(mongoUrl, {
         dbName: 'alerting_platform'
